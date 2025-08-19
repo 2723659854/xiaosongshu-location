@@ -35,7 +35,11 @@ Location.getGeoLocation().then(res=>{
     // 所属国家
     "country": "CN",
     // 网络类型
-    "net": "4g_IP"
+    "net": "4g_IP",
+    // 网络类型
+    "networkType": "WiFi/有线网络",
+    // 运营商
+    operator: "中国电信"   
 }
 ```
 本插件支持ip定位，gps定位和html定位。优先级是gps定位>ip定位>html定位。但是gps定位需要依赖gps设备。

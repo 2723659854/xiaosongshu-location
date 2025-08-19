@@ -1,19 +1,14 @@
 /**
- * @purpose 智能定位系统 - 自动检测设备GPS能力并选择最优定位策略
+ * @purpose 智能定位系统 - 最终修复版，解决无type属性导致的WiFi识别问题
  * @author yanglong
- * @time 2025年7月15日14:54:46
- * @note
- * 1. 先尝试检测GPS可用性
- * 2. 根据结果选择GPS定位或IP定位
- * 3. 提供多级降级策略确保定位成功率
- * 4，中国大致位于东经 73°~135°、北纬 18°~53°，超过这个范围，可能用户打开了VPN 或者在国外访问
+ * @time 2025年8月19日
  */
 export class Location{
     /**
      * 主定位方法 - 智能选择定位策略
      */
     static async getGeoLocation() {
-        console.log("初始化智能定位系统...");
+        //console.log("初始化智能定位系统...");
 
         // 初始化结果对象
         const result = {
@@ -24,36 +19,39 @@ export class Location{
             timestamp: Date.now(),
             city: "",
             country: "",
+            operator: "未知",
+            networkType: "未知",
+            isWiFi: false,
             error: null
         };
 
         try {
+            // 获取网络信息
+            const networkInfo = this._getNetworkInfo();
+            result.networkType = networkInfo.networkType;
+            result.isWiFi = networkInfo.isWiFi;
 
-            // 首先使用精度最高的gps,检测设备类型和GPS可用性
+            // 检测设备能力
             const deviceInfo = await this._detectDeviceCapabilities();
-            //console.log("设备信息:", deviceInfo);
 
-            // 根据设备能力选择定位策略，必须支持gps，并且精度小于500米，才使用gps,大于500米就不如用wifi定位了
+            // GPS定位
             if (deviceInfo.hasGps && deviceInfo.accuracy < 500) {
                 const gpsResult = await this._getGpsLocation();
                 if (gpsResult.success) {
-                    //console.log("gps定位")
-                    return this._formatResult(gpsResult, "GPS");
+                    return this._mergeResults(this._formatResult(gpsResult, "GPS"), networkInfo);
                 }
             }
 
-            // 如果用户既没有安装gps，老版本浏览器也不支持定位，那就调用ip解析
+            // IP定位
             const ipResult = await this._getIpLocation();
             if (ipResult.success) {
-                //console.log("ip定位")
-                return this._formatResult(ipResult, "IP");
+                return this._mergeResults(this._formatResult(ipResult, "IP"), networkInfo);
             }
 
-            // HTML5定位 理论上大多数浏览器是支持定位的，通过wifi和路由器定位
+            // HTML5定位
             const htmlResult = await this._getHtml5Location();
             if (htmlResult.success) {
-                //console.log("html定位")
-                return this._formatResult(htmlResult, "HTML5");
+                return this._mergeResults(this._formatResult(htmlResult, "HTML5"), networkInfo);
             }
 
             // 所有定位方法都失败
@@ -65,23 +63,111 @@ export class Location{
         }
     }
 
+    /**
+     * 合并定位结果和网络信息
+     */
+    static _mergeResults(locationResult, networkInfo) {
+        return {
+            ...locationResult,
+            networkType: networkInfo.networkType,
+            isWiFi: networkInfo.isWiFi
+        };
+    }
 
     /**
-     * 优化版：检测设备类型和GPS可用性（结合精度判断）
+     * 优化网络类型检测（针对无type属性的浏览器修复）
+     */
+    static _getNetworkInfo() {
+        let networkType = "未知";
+        let isWiFi = false;
+        let connection;
+
+        // 兼容不同浏览器的connection属性
+        if (navigator.connection) {
+            connection = navigator.connection;
+        } else if (navigator.mozConnection) {
+            connection = navigator.mozConnection;
+        } else if (navigator.webkitConnection) {
+            connection = navigator.webkitConnection;
+        }
+
+        // 调试信息
+        //console.log("浏览器网络连接信息:", connection);
+
+        // 判断设备类型（桌面/移动）
+        const userAgent = navigator.userAgent;
+        const isDesktop = !/Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);
+        const isMobile = !isDesktop;
+
+        if (connection) {
+            // 处理有type属性的情况
+            if (typeof connection.type !== 'undefined') {
+                const wifiRelatedTypes = ['wifi', 'wlan', 'unknown', '802.11'];
+                const ethernetTypes = ['ethernet', 'lan'];
+
+                if (wifiRelatedTypes.includes(connection.type)) {
+                    isWiFi = true;
+                    networkType = "WiFi";
+                } else if (ethernetTypes.includes(connection.type)) {
+                    isWiFi = true;
+                    networkType = "有线网络";
+                } else {
+                    // 移动网络类型判断
+                    switch(connection.effectiveType) {
+                        case '4g': networkType = '4G'; break;
+                        case '3g': networkType = '3G'; break;
+                        case '2g': networkType = '2G'; break;
+                        case '5g': networkType = '5G'; break;
+                        case 'slow-2g': networkType = '2G (慢速)'; break;
+                        default: networkType = '移动网络';
+                    }
+                }
+            } else {
+                // 处理无type属性的情况（重点修复）
+                if (isDesktop) {
+                    // 桌面设备强制判定为WiFi/有线
+                    isWiFi = true;
+                    networkType = "WiFi/有线网络";
+                } else {
+                    // 移动设备按effectiveType判断
+                    switch(connection.effectiveType) {
+                        case '4g': networkType = '4G'; break;
+                        case '3g': networkType = '3G'; break;
+                        case '2g': networkType = '2G'; break;
+                        case '5g': networkType = '5G'; break;
+                        case 'slow-2g': networkType = '2G (慢速)'; break;
+                        default: networkType = '移动网络';
+                    }
+                    isWiFi = false;
+                }
+            }
+        } else {
+            // 不支持connection API的情况
+            if (isDesktop) {
+                networkType = "WiFi/有线网络";
+                isWiFi = true;
+            } else {
+                networkType = "移动网络";
+                isWiFi = false;
+            }
+        }
+
+        return { networkType, isWiFi };
+    }
+
+    /**
+     * 检测设备类型和GPS可用性
      */
     static async _detectDeviceCapabilities() {
-        // 1. 检测设备类型（移动/PC）
         const userAgent = navigator.userAgent;
         const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent);
-        const isTablet = /iPad|Tablet|Touch/i.test(userAgent); // 区分平板
+        const isTablet = /iPad|Tablet|Touch/i.test(userAgent);
         const deviceType = isMobile ? "移动设备" : (isTablet ? "平板设备" : "桌面设备");
 
-        // 2. 检测GPS硬件（结合定位精度判断）
         let hasGps = false;
-        let locationAccuracy = Infinity; // 定位精度（米）
+        let locationAccuracy = Infinity;
 
         try {
-            // 尝试获取高精度位置（短超时）
             const position = await Promise.race([
                 new Promise((resolve, reject) => {
                     if (!navigator.geolocation) {
@@ -90,12 +176,12 @@ export class Location{
                     }
 
                     navigator.geolocation.getCurrentPosition(
-                        (pos) => resolve(pos), // 成功获取位置
-                        (err) => reject(err),  // 定位失败
+                        (pos) => resolve(pos),
+                        (err) => reject(err),
                         {
-                            enableHighAccuracy: true, // 要求高精度
-                            timeout: 10000,            // 3秒超时（给GPS足够响应时间）
-                            maximumAge: 0             // 不使用缓存
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 0
                         }
                     );
                 }),
@@ -104,18 +190,13 @@ export class Location{
                 )
             ]);
 
-            // 3. 关键：通过精度判断是否为真实GPS
-            locationAccuracy = position.coords.accuracy; // 单位：米
-            // 规则：
-            // - 移动设备：精度<100米 → 认为有GPS
-            // - 平板设备：精度<200米 → 认为有GPS（平板GPS精度略低）
-            // - PC设备：即使有位置，也默认无GPS（PC极少配备GPS）
+            locationAccuracy = position.coords.accuracy;
             if (isMobile) {
-                hasGps = locationAccuracy < 100; // 手机GPS通常<100米
+                hasGps = locationAccuracy < 100;
             } else if (isTablet) {
-                hasGps = locationAccuracy < 200; // 平板GPS精度稍低
+                hasGps = locationAccuracy < 200;
             } else {
-                hasGps = false; // PC默认无GPS，无论定位是否成功
+                hasGps = false;
             }
 
         } catch (error) {
@@ -128,7 +209,7 @@ export class Location{
             isTablet,
             deviceType,
             hasGps,
-            accuracy: locationAccuracy // 返回精度，供后续定位策略参考
+            accuracy: locationAccuracy
         };
     }
 
@@ -150,13 +231,12 @@ export class Location{
                     });
                 },
                 (error) => {
-                    //console.error("GPS定位错误:", error);
                     resolve({ success: false, error: error.message });
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 15000,  // 给GPS足够时间
-                    maximumAge: 0    // 不使用缓存
+                    timeout: 15000,
+                    maximumAge: 0
                 }
             );
         });
@@ -166,9 +246,7 @@ export class Location{
      * IP定位（多服务备份）
      */
     static async _getIpLocation() {
-        // 定义多个IP定位服务，按优先级排序
         const ipServices = [
-
             {
                 name: "ipinfo",
                 url: "https://ipinfo.io/json",
@@ -177,22 +255,12 @@ export class Location{
                     return {
                         latitude: parseFloat(lat),
                         longitude: parseFloat(lon),
-                        accuracy: 10000,  // ipinfo精度通常更高
+                        accuracy: 10000,
                         city: data.city,
-                        country: data.country
+                        country: data.country,
+                        operator: data.org || "未知"
                     };
                 }
-            },
-            {
-                name: "geoplugin",
-                url: "https://www.geoplugin.net/json.gp", // 支持HTTPS
-                parse: (data) => ({
-                    latitude: parseFloat(data.geoplugin_latitude),
-                    longitude: parseFloat(data.geoplugin_longitude),
-                    city: data.geoplugin_city,
-                    country: data.geoplugin_countryName,
-                    accuracy: 50000
-                })
             },
             {
                 name: "ip-api",
@@ -200,17 +268,28 @@ export class Location{
                 parse: (data) => ({
                     latitude: data.lat,
                     longitude: data.lon,
-                    accuracy: 50000,  // IP定位典型精度50km
+                    accuracy: 50000,
                     city: data.city,
-                    country: data.country
+                    country: data.country,
+                    operator: data.isp || "未知"
                 })
             },
+            {
+                name: "geoplugin",
+                url: "https://www.geoplugin.net/json.gp",
+                parse: (data) => ({
+                    latitude: parseFloat(data.geoplugin_latitude),
+                    longitude: parseFloat(data.geoplugin_longitude),
+                    city: data.geoplugin_city,
+                    country: data.geoplugin_countryName,
+                    accuracy: 50000,
+                    operator: "未知"
+                })
+            }
         ];
 
-        // 尝试每个IP定位服务
         for (const service of ipServices) {
             try {
-                //console.log(`尝试IP定位服务: ${service.name}`);
                 const response = await fetch(service.url, {
                     headers: { 'Accept': 'application/json' }
                 });
@@ -227,8 +306,7 @@ export class Location{
                     ...location
                 };
             } catch (error) {
-                //console.warn(`IP定位服务 ${service.name} 失败:`, error);
-                // 继续尝试下一个服务
+                console.warn(`IP定位服务 ${service.name} 失败:`, error);
             }
         }
 
@@ -253,13 +331,12 @@ export class Location{
                     });
                 },
                 (error) => {
-                    //console.error("HTML5定位错误:", error);
                     resolve({ success: false, error: error.message });
                 },
                 {
-                    enableHighAccuracy: false,  // 不强制高精度
-                    timeout: 10000,              // 10秒超时
-                    maximumAge: 300000          // 5分钟缓存
+                    enableHighAccuracy: false,
+                    timeout: 10000,
+                    maximumAge: 300000
                 }
             );
         });
@@ -269,10 +346,6 @@ export class Location{
      * 格式化定位结果
      */
     static _formatResult(data, source) {
-        let netType = "未知";
-        if (navigator.connection) {
-            netType = navigator.connection.effectiveType;
-        }
         if (!data.success) {
             return {
                 longitude: "定位失败",
@@ -280,12 +353,11 @@ export class Location{
                 accuracy: Infinity,
                 source: source,
                 timestamp: Date.now(),
-                error: data.error || "未知错误",
-                net:netType + "_" + source
+                operator: "未知",
+                error: data.error || "未知错误"
             };
         }
 
-        // 根据不同定位源格式化结果
         if (source === "GPS" || source === "HTML5") {
             return {
                 longitude: data.coords.longitude,
@@ -293,7 +365,7 @@ export class Location{
                 accuracy: data.coords.accuracy,
                 source: source,
                 timestamp: Date.now(),
-                net:netType + "_" + source
+                operator: "未知"
             };
         } else if (source === "IP") {
             return {
@@ -302,13 +374,46 @@ export class Location{
                 accuracy: data.accuracy,
                 source: source,
                 timestamp: Date.now(),
-                city: data.city,
-                country: data.country,
-                net:netType + "_" + source
+                city: data.city || "",
+                country: data.country || "",
+                operator: this._formatOperatorName(data.operator)
             };
         }
 
         return data;
     }
-}
 
+    /**
+     * 格式化运营商名称
+     */
+    static _formatOperatorName(operator) {
+        if (!operator || operator === "未知") return "未知";
+
+        // 处理AS号码
+        if (/^AS\d+$/.test(operator)) {
+            const asMap = {
+                'AS4134': '中国电信',
+                'AS9808': '中国移动',
+                'AS4837': '中国联通',
+                'AS58453': '中国广电'
+            };
+            return asMap[operator] || `AS号码: ${operator}`;
+        }
+
+        // 转换常见运营商名称
+        const operatorMap = [
+            { regex: /中国移动|China Mobile/i, name: "中国移动" },
+            { regex: /中国电信|China Telecom|AS4134/i, name: "中国电信" },
+            { regex: /中国联通|China Unicom|AS4837/i, name: "中国联通" },
+            { regex: /中国广电|AS58453/i, name: "中国广电" }
+        ];
+
+        for (const item of operatorMap) {
+            if (item.regex.test(operator)) {
+                return item.name;
+            }
+        }
+
+        return operator.split(/\s|-/)[0];
+    }
+}
