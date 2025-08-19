@@ -31,13 +31,13 @@ export class Location{
 
             // 首先使用精度最高的gps,检测设备类型和GPS可用性
             const deviceInfo = await this._detectDeviceCapabilities();
-            console.log("设备信息:", deviceInfo);
+            //console.log("设备信息:", deviceInfo);
 
             // 根据设备能力选择定位策略，必须支持gps，并且精度小于500米，才使用gps,大于500米就不如用wifi定位了
             if (deviceInfo.hasGps && deviceInfo.accuracy < 500) {
                 const gpsResult = await this._getGpsLocation();
                 if (gpsResult.success) {
-                    console.log("gps定位")
+                    //console.log("gps定位")
                     return this._formatResult(gpsResult, "GPS");
                 }
             }
@@ -45,23 +45,21 @@ export class Location{
             // 如果用户既没有安装gps，老版本浏览器也不支持定位，那就调用ip解析
             const ipResult = await this._getIpLocation();
             if (ipResult.success) {
-                console.log("ip定位")
+                //console.log("ip定位")
                 return this._formatResult(ipResult, "IP");
             }
 
             // HTML5定位 理论上大多数浏览器是支持定位的，通过wifi和路由器定位
             const htmlResult = await this._getHtml5Location();
             if (htmlResult.success) {
-                console.log("html定位")
+                //console.log("html定位")
                 return this._formatResult(htmlResult, "HTML5");
             }
-
-
 
             // 所有定位方法都失败
             throw new Error("所有定位方法均失败");
         } catch (error) {
-            console.error("定位系统错误:", error);
+            //console.error("定位系统错误:", error);
             result.error = error.message;
             return result;
         }
@@ -121,7 +119,7 @@ export class Location{
             }
 
         } catch (error) {
-            console.warn("GPS检测失败:", error.message);
+            //console.warn("GPS检测失败:", error.message);
             hasGps = false;
         }
 
@@ -152,7 +150,7 @@ export class Location{
                     });
                 },
                 (error) => {
-                    console.error("GPS定位错误:", error);
+                    //console.error("GPS定位错误:", error);
                     resolve({ success: false, error: error.message });
                 },
                 {
@@ -212,7 +210,7 @@ export class Location{
         // 尝试每个IP定位服务
         for (const service of ipServices) {
             try {
-                console.log(`尝试IP定位服务: ${service.name}`);
+                //console.log(`尝试IP定位服务: ${service.name}`);
                 const response = await fetch(service.url, {
                     headers: { 'Accept': 'application/json' }
                 });
@@ -229,7 +227,7 @@ export class Location{
                     ...location
                 };
             } catch (error) {
-                console.warn(`IP定位服务 ${service.name} 失败:`, error);
+                //console.warn(`IP定位服务 ${service.name} 失败:`, error);
                 // 继续尝试下一个服务
             }
         }
@@ -255,7 +253,7 @@ export class Location{
                     });
                 },
                 (error) => {
-                    console.error("HTML5定位错误:", error);
+                    //console.error("HTML5定位错误:", error);
                     resolve({ success: false, error: error.message });
                 },
                 {
