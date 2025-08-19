@@ -24,22 +24,22 @@ Location.getGeoLocation().then(res=>{
     "longitude": 106.5577,
     // 纬度
     "latitude": 29.5603,
-    // 精确度（米）
+    // 精度（米）
     "accuracy": 10000,
     // 定位方式
     "source": "IP",
     // 时间戳
-    "timestamp": 1755513150744,
-    // 所属城市
+    "timestamp": 1755573923594,
+    // 城市
     "city": "Chongqing",
-    // 所属国家
+    // 国家
     "country": "CN",
-    // 网络类型
-    "net": "4g_IP",
+    // 运营商
+    "operator": "中国电信",
     // 网络类型
     "networkType": "WiFi/有线网络",
-    // 运营商
-    operator: "中国电信"   
+    // 是否wifi
+    "isWiFi": true
 }
 ```
 本插件支持ip定位，gps定位和html定位。优先级是gps定位>ip定位>html定位。但是gps定位需要依赖gps设备。
