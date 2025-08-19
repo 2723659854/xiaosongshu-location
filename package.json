@@ -1,0 +1,14 @@
+{
+  "name": "xiaosongshu-location",
+  "version": "1.0.0",
+  "description": "get the geo location",
+  "main": "index.js",
+  "scripts": {
+    "build": "mkdir -p dist && cp src/Location.js dist/Location.js"
+  },
+  "keywords": [
+    "location"
+  ],
+  "author": "xiaosongshu",
+  "license": "MIT"
+}
