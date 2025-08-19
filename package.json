@@ -1,6 +1,6 @@
 {
   "name": "xiaosongshu-location",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "get the geo location",
   "main": "index.js",
   "scripts": {
